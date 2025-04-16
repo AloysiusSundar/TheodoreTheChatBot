@@ -4,7 +4,7 @@
 
 Theodore is a sleek, professional, and intelligent AI-powered interview assistant. Designed for streamlined, structured candidate evaluations, Theodore gathers applicant information step-by-step and tailors technical questions based on experience and skillset. Powered by locally hosted open-source LLMs (e.g., LLaMA2 or DeepSeek), Theodore provides a secure, customizable, and conversational interview experience in a minimalist dark-themed Streamlit UI.
 
-##INSTALLATION
+## INSTALLATION
 
 To run it locally, first, clone the repository.
 Install dependencies
@@ -24,7 +24,7 @@ If you wish to exit the interview, just tell Theodore that you want to!
 
 Theodore is smart and uses sentiment analysis, he would acknowledge if you are happy and would also offer to reschedule the interview at a later time if you are frustrated with the experience.
 
-##Technical Details
+## Technical Details
 
 Frontend: Streamlit (dark-themed chat UI)
 Backend: Python, SQLite for local data storage
@@ -32,7 +32,7 @@ LLM: Ollama running mistral-small3.1
 NLP: TextBlob for sentiment analysis
 LangChain: Prompt handling and response streaming
 
-##Architecture Overview
+## Architecture Overview
 
 Modular code structure with main.py managing the app flow.
 LLM calls routed through a reusable LangChain chain using a dynamic system prompt.
@@ -40,11 +40,11 @@ SQLite persists interview data after form completion.
 Sentiment analysis provides empathetic feedback.
 Step tracking ensures controlled, sequential interviews before technical questioning.
 
-##PROMPT
+## PROMPT
 
 Theodore's prompt design is thoughtfully structured to ensure a smooth, professional, and efficient interaction. The prompt consists of three core components: a system message that establishes Theodore’s formal, encouraging tone and behavioral guidelines; a chat history context that preserves the full conversation for the LLM to process in context; and a current_field tracker that determines what question should be asked next.
 
-##CHALLANGES 
+## CHALLANGES 
 
 During development, maintaining the structured, step-by-step interview flow presented a key challenge. To address this, a step_index was introduced to track progress and enforce a strict one-question-at-a-time sequence. This ensured Theodore wouldn’t jump ahead or repeat steps unnecessarily.
 
