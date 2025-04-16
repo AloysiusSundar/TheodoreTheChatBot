@@ -24,7 +24,7 @@ If you wish to exit the interview, just tell Theodore that you want to!
 
 Theodore is smart and uses sentiment analysis, he would acknowledge if you are happy and would also offer to reschedule the interview at a later time if you are frustrated with the experience.
 
-## Technical Details
+## TECHNICHAL DETAILS
 
 Frontend: Streamlit (dark-themed chat UI)
 Backend: Python, SQLite for local data storage
@@ -32,7 +32,7 @@ LLM: Ollama running mistral-small3.1
 NLP: TextBlob for sentiment analysis
 LangChain: Prompt handling and response streaming
 
-## Architecture Overview
+## ARCHITECTURE OVERVIEW
 
 Modular code structure with main.py managing the app flow.
 LLM calls routed through a reusable LangChain chain using a dynamic system prompt.
