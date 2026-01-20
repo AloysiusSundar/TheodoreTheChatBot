@@ -4,12 +4,20 @@ import re
 from langchain_community.llms import Ollama
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from textblob import TextBlob
 
-conn = sqlite3.connect('interviews.db')
-cursor = conn.cursor()
+DB_PATH = "interviews.db"
 
-cursor.execute('''
+# =====================================================
+# DATABASE HELPERS (CRITICAL FIX)
+# =====================================================
+def get_conn():
+    return sqlite3.connect(DB_PATH)
+
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS interview_data (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
@@ -20,177 +28,241 @@ cursor.execute('''
         experience_years INTEGER,
         tech_stack TEXT
     )
-''')
-conn.commit()
+    """)
 
-def detect_exit_keywords(user_input):
-    exit_keywords = [
-        "quit", "exit", "stop", "end interview", "cancel", 
-        "leave", "not now", "pause", "maybe later"
-    ]
-    return any(keyword in user_input.lower() for keyword in exit_keywords)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS technical_responses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        interview_id INTEGER,
+        question TEXT,
+        answer TEXT,
+        question_order INTEGER
+    )
+    """)
 
+    conn.commit()
+    conn.close()
 
-# Validate email
+init_db()
+
+# =====================================================
+# VALIDATION
+# =====================================================
 def validate_email(email):
     return bool(re.match(r"[^@]+@[^@]+\.[^@]+", email))
 
 def validate_phone(phone):
-    return bool(re.match(r'^\d{10}$', phone))
+    return bool(re.match(r"^\d{10}$", phone))
 
-def analyze_sentiment(text):
-    blob = TextBlob(text)
-    polarity = blob.sentiment.polarity  # -1.0 (negative) to 1.0 (positive)
-    return polarity
+# =====================================================
+# STREAMLIT CONFIG
+# =====================================================
+st.set_page_config(
+    page_title="Theodore – AI Interviewer",
+    page_icon="🤖",
+    layout="centered"
+)
 
-# Page config
-st.set_page_config(page_title="Theodore – AI Interviewer", page_icon="🤖", layout="centered")
-st.title("🤖 AI-Powered Hiring Assistant")
+st.title("🤖 Theodore — AI Hiring Assistant")
 
-# List of fields to collect in order
-interview_fields = [
-    "name",
-    "phone number",
-    "email address",
-    "location",
-    "role applying for",
-    "years of experience",
-    "tech stack / main programming expertise"   
+# =====================================================
+# INTERVIEW STRUCTURE
+# =====================================================
+profile_fields = [
+    ("name", "your full name"),
+    ("phone_number", "your 10-digit phone number"),
+    ("email_address", "your email address"),
+    ("location", "your current location"),
+    ("role", "the role you are applying for"),
+    ("experience_years", "your years of experience"),
+    ("tech_stack", "your main programming expertise"),
 ]
 
-
-# Initialize session state
+# =====================================================
+# SESSION STATE
+# =====================================================
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I’m Theodore, your AI interview assistant. Let’s begin — may I have your name, please?"}
-    ]
-if "answers" not in st.session_state:
-    st.session_state.answers = {}
-if "step_index" not in st.session_state:
-    st.session_state.step_index = 0
+    st.session_state.messages = [{
+        "role": "assistant",
+        "content": "Hello! I’m Theodore. May I have your full name, please?"
+    }]
 
-# Restart button
+if "phase" not in st.session_state:
+    st.session_state.phase = "profile"
+
+if "profile_step" not in st.session_state:
+    st.session_state.profile_step = 0
+
+if "tech_step" not in st.session_state:
+    st.session_state.tech_step = 0
+
+if "profile_answers" not in st.session_state:
+    st.session_state.profile_answers = {}
+
+if "tech_questions" not in st.session_state:
+    st.session_state.tech_questions = []
+
+if "interview_id" not in st.session_state:
+    st.session_state.interview_id = None
+
+# =====================================================
+# RESTART
+# =====================================================
 if st.button("🔁 Restart Interview"):
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! I’m Theodore, your AI interview assistant. Let’s begin — may I have your name, please?"}
-    ]
-    st.session_state.answers = {}
-    st.session_state.step_index = 0
+    st.session_state.clear()
     st.rerun()
 
-# Display chat history
+# =====================================================
+# SHOW CHAT
+# =====================================================
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Define prompt template
-prompt_template = ChatPromptTemplate.from_messages([
+# =====================================================
+# LLM SETUP
+# =====================================================
+llm = Ollama(model="mistral-small3.2")
+parser = StrOutputParser()
+
+tech_q_prompt = ChatPromptTemplate.from_messages([
     ("system", """
-You are Theodore, a professional, formal, and encouraging AI interviewer.
-
-You are collecting candidate information step-by-step. At each step, do the following:
-- Acknowledge the user's latest answer.
-- Ask for exactly one item from the list, in order:
-  1. Name
-  2. Phone number
-  3. Email address
-  4. Location
-  5. Role applying for
-  6. Years of experience
-  7. Tech stack / main programming expertise
-
-After collecting all 7 fields, ask **only 3 very basic technical questions** tailored to the role and tech stack.
-
-You must now ask for the following field: **{current_field}**
-If {current_field} is 'technical questions', begin with the first technical question. 
-Do not ask more than three technical questions in total.
-Do not ask about anything else or ask multiple questions.
-Do not assume or guess the user's info. Remain formal and concise but be warm and encouraging when you acknowledge.
-"""),
-    ("user", "{chat_history}")
+Generate exactly 3 basic technical interview questions
+for a candidate applying for the role of {role}
+with experience in {tech_stack}.
+Return ONLY the questions, each on a new line.
+""")
 ])
 
-# Setup LLM
-llm = Ollama(model="mistral-small3.1")
-output_parser = StrOutputParser()
-chain = prompt_template | llm | output_parser
+tech_q_chain = tech_q_prompt | llm | parser
 
-def save_interview_data(data):
-    cursor.execute('''
-        INSERT INTO interview_data (name, phone_number, email_address, location, role, tech_stack, experience_years)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        data.get('name'),
-        data.get('phone_number'),
-        data.get('email_address'),
-        data.get('location'),
-        data.get('role'),
-        data.get('experience_years'),
-        data.get('tech_stack')
-    ))
-    conn.commit()
+ask_prompt = ChatPromptTemplate.from_messages([
+    ("system", """
+You are Theodore, a professional interviewer.
+Acknowledge briefly, then ask ONLY this question:
+{question}
+"""),
+    ("user", "{history}")
+])
 
-# Chat input
+ask_chain = ask_prompt | llm | parser
+
+# =====================================================
+# CHAT INPUT
+# =====================================================
 if user_input := st.chat_input("Your response..."):
-    # Display user message
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
-        
-    if detect_exit_keywords(user_input):
-        st.session_state.messages.append({"role": "assistant", "content": "Understood. Ending the interview here. Thank you for your time!"})
-        st.rerun()
-        
-    sentiment_score = analyze_sentiment(user_input)
-    if sentiment_score < -0.5:
-        st.warning("You seem upset. If you’d like to pause or restart the interview, feel free to let me know.")
-    elif sentiment_score > 0.5:
-        st.success("I'm glad you're feeling positive!")
-    
-    if st.session_state.step_index == 2:  # Email step (index 2 corresponds to email)
-        if not validate_email(user_input):
-            st.error("Invalid email address. Please enter a valid email.")
-            st.session_state.step_index -= 1  # Stay on the email step
-        else:
-            st.session_state.answers["email address"] = user_input
-            st.session_state.step_index += 1 
-            
-    if st.session_state.step_index == 1:  # Phone number step
-        if not validate_phone(user_input):
-            st.error("Invalid phone number. Please enter a valid 10-digit phone number.")
-        else:
-            st.session_state.answers["phone number"] = user_input
 
-    # Save user's answer if within the expected steps
-    # Save user's answer if within the expected steps
-    if st.session_state.step_index < len(interview_fields):
-        current_field = interview_fields[st.session_state.step_index]
-        st.session_state.answers[current_field] = user_input
-        st.session_state.step_index += 1
+    # =========================
+    # PROFILE PHASE
+    # =========================
+    if st.session_state.phase == "profile":
+        key, label = profile_fields[st.session_state.profile_step]
 
+        if key == "email_address" and not validate_email(user_input):
+            st.error("Invalid email address.")
+            st.stop()
 
-    # Determine next field or enter technical phase
-    if st.session_state.step_index < len(interview_fields):
-        current_field = interview_fields[st.session_state.step_index]
+        if key == "phone_number" and not validate_phone(user_input):
+            st.error("Invalid phone number.")
+            st.stop()
+
+        st.session_state.profile_answers[key] = user_input
+        st.session_state.profile_step += 1
+
+        if st.session_state.profile_step == len(profile_fields):
+            conn = get_conn()
+            cur = conn.cursor()
+
+            cur.execute("""
+                INSERT INTO interview_data (
+                    name, phone_number, email_address,
+                    location, role, experience_years, tech_stack
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                st.session_state.profile_answers["name"],
+                st.session_state.profile_answers["phone_number"],
+                st.session_state.profile_answers["email_address"],
+                st.session_state.profile_answers["location"],
+                st.session_state.profile_answers["role"],
+                int(st.session_state.profile_answers["experience_years"]),
+                st.session_state.profile_answers["tech_stack"]
+            ))
+
+            conn.commit()
+            st.session_state.interview_id = cur.lastrowid
+            conn.close()
+
+            raw = tech_q_chain.invoke({
+                "role": st.session_state.profile_answers["role"],
+                "tech_stack": st.session_state.profile_answers["tech_stack"]
+            })
+
+            st.session_state.tech_questions = [
+                q.strip() for q in raw.split("\n") if q.strip()
+            ]
+
+            st.session_state.phase = "technical"
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": st.session_state.tech_questions[0]
+            })
+            st.rerun()
+
+        next_question = profile_fields[st.session_state.profile_step][1]
+
+    # =========================
+    # TECHNICAL PHASE (GUARANTEED SAVE)
+    # =========================
+    elif st.session_state.phase == "technical":
+        question = st.session_state.tech_questions[st.session_state.tech_step]
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO technical_responses (
+                interview_id, question, answer, question_order
+            ) VALUES (?, ?, ?, ?)
+        """, (
+            st.session_state.interview_id,
+            question,
+            user_input,
+            st.session_state.tech_step + 1
+        ))
+
+        conn.commit()
+        conn.close()
+
+        st.session_state.tech_step += 1
+
+        if st.session_state.tech_step >= len(st.session_state.tech_questions):
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": "Thank you. This concludes the interview."
+            })
+            st.session_state.phase = "done"
+            st.rerun()
+
+        next_question = st.session_state.tech_questions[st.session_state.tech_step]
+
     else:
-        current_field = "technical questions"
+        st.stop()
 
-    # Rebuild full chat history
-    full_history = "\n".join([
-    msg["content"] for msg in st.session_state.messages
-])
+    # =========================
+    # THEODORE RESPONSE
+    # =========================
+    history = "\n".join(m["content"] for m in st.session_state.messages)
 
-    # Invoke LLM
     with st.chat_message("assistant", avatar="🤖"):
-        with st.spinner("Theodore is thinking..."):
-            response = chain.invoke({
-                "chat_history": full_history,
-                "current_field": current_field
+        with st.spinner("🧠 Theodore is thinking..."):
+            response = ask_chain.invoke({
+                "history": history,
+                "question": next_question
             })
             st.markdown(response)
 
-    # Append assistant's message
     st.session_state.messages.append({"role": "assistant", "content": response})
-    
-    if st.session_state.step_index == len(interview_fields):
-        save_interview_data(st.session_state.answers)
