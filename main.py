@@ -7,9 +7,6 @@ from langchain_core.output_parsers import StrOutputParser
 
 DB_PATH = "interviews.db"
 
-# =====================================================
-# DATABASE HELPERS (CRITICAL FIX)
-# =====================================================
 def get_conn():
     return sqlite3.connect(DB_PATH)
 
@@ -45,18 +42,13 @@ def init_db():
 
 init_db()
 
-# =====================================================
-# VALIDATION
-# =====================================================
 def validate_email(email):
     return bool(re.match(r"[^@]+@[^@]+\.[^@]+", email))
 
 def validate_phone(phone):
     return bool(re.match(r"^\d{10}$", phone))
 
-# =====================================================
-# STREAMLIT CONFIG
-# =====================================================
+
 st.set_page_config(
     page_title="Theodore – AI Interviewer",
     page_icon="🤖",
@@ -65,9 +57,7 @@ st.set_page_config(
 
 st.title("🤖 Theodore — AI Hiring Assistant")
 
-# =====================================================
-# INTERVIEW STRUCTURE
-# =====================================================
+
 profile_fields = [
     ("name", "your full name"),
     ("phone_number", "your 10-digit phone number"),
@@ -78,9 +68,7 @@ profile_fields = [
     ("tech_stack", "your main programming expertise"),
 ]
 
-# =====================================================
-# SESSION STATE
-# =====================================================
+
 if "messages" not in st.session_state:
     st.session_state.messages = [{
         "role": "assistant",
@@ -105,23 +93,17 @@ if "tech_questions" not in st.session_state:
 if "interview_id" not in st.session_state:
     st.session_state.interview_id = None
 
-# =====================================================
-# RESTART
-# =====================================================
+
 if st.button("🔁 Restart Interview"):
     st.session_state.clear()
     st.rerun()
 
-# =====================================================
-# SHOW CHAT
-# =====================================================
+
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# =====================================================
-# LLM SETUP
-# =====================================================
+
 llm = Ollama(model="mistral-small3.2")
 parser = StrOutputParser()
 
@@ -147,17 +129,12 @@ Acknowledge briefly, then ask ONLY this question:
 
 ask_chain = ask_prompt | llm | parser
 
-# =====================================================
-# CHAT INPUT
-# =====================================================
 if user_input := st.chat_input("Your response..."):
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # =========================
-    # PROFILE PHASE
-    # =========================
+
     if st.session_state.phase == "profile":
         key, label = profile_fields[st.session_state.profile_step]
 
@@ -214,9 +191,7 @@ if user_input := st.chat_input("Your response..."):
 
         next_question = profile_fields[st.session_state.profile_step][1]
 
-    # =========================
-    # TECHNICAL PHASE (GUARANTEED SAVE)
-    # =========================
+
     elif st.session_state.phase == "technical":
         question = st.session_state.tech_questions[st.session_state.tech_step]
 
@@ -252,9 +227,6 @@ if user_input := st.chat_input("Your response..."):
     else:
         st.stop()
 
-    # =========================
-    # THEODORE RESPONSE
-    # =========================
     history = "\n".join(m["content"] for m in st.session_state.messages)
 
     with st.chat_message("assistant", avatar="🤖"):
