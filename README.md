@@ -41,7 +41,7 @@ This project was built as a time-boxed engineering exercise, with an emphasis on
 ![Theodore asking questions](assets/stack2.png)
 ![Theodore finishing interview](assets/final.png)
 ![Database overview](assets/dbow.png)
-![Database persistent](assets/persistent.png)
+![Database persistent](assets/persistentdb.png)
 ![Database persistent](assets/db.png)
 
 
