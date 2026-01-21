@@ -33,4 +33,15 @@ This project was built as a time-boxed engineering exercise, with an emphasis on
 - Ollama installed and running
 - A local model pulled (e.g. `ollama pull mistral-small`)
 
+## 🖥️ Interface Preview
+
+![Theodore collecting initial details](assets/details.png)
+![Theodore chat flow](assets/chatflow.png)
+![Theodore collecting stack](assets/stack.png)
+![Theodore asking questions](assets/stack2.png)
+![Theodore finishing interview](assets/final.png)
+![Database overview](assets/dbow.png)
+![Database persistent](assets/persistent.png)
+![Database persistent](assets/db.png)
+
 
